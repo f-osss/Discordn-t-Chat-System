@@ -1,5 +1,5 @@
 ## Multi-threaded API web server
-### a multi-threaded web server that serves dynamic content. Specifically a website that uses Javascript to populate and post to “Discordn’t”.
+### A multi-threaded web server that serves dynamic content. Specifically a website that uses Javascript to populate and post to “Discordn’t”.
 ### How to start the chat server
 
 To start the chat server, you run the following command into the terminal
