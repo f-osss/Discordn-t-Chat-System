@@ -2,7 +2,7 @@
 ### A multi-threaded web server that serves dynamic content. Specifically a website that uses Javascript to populate and post to “Discordn’t”.
 ### How to start the chat server
 
-To start the chat server, you run the following command into the terminal
+To start the chat server, you run the following command into the terminal (Linux, macOS, or WSL recommended):
 
 ```
 python3 server.py
@@ -59,7 +59,7 @@ The client needs to send **quit** as a message to disconnect
 When a user sends a message in the web browser, it is displayed on the right side of the screen
 with a delete button. Clicking the delete button removes the message for all connected web clients.
 
-### Part 2 System test in C
+### System test in C
 
 A MakeFile has been provided to compile the C screen scraper client. To compile, type
 ```make``` into the terminal
@@ -81,10 +81,10 @@ format is as follows:
 The username used for this test can not be the same as an active web client username, as the system only allows unique
 usernames.
 
-### Notes about part2:
+### Notes about System test:
 
 When running on Aviary, if the machine the scraper test is running on is not the same as the web server, it was unable
-to form a connection. I am unsure why this occurred.
+to form a connection.
 
 ### Additional information
 
