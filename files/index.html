@@ -1,0 +1,548 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Title</title>
+    <script>
+        let isLoggedIn = false
+        let lastTimeStamp = ''
+        let user = ''
+        const checkLogin = (callback, loginProcess = false) => {
+            const xhr = new XMLHttpRequest();
+
+            xhr.open('GET', '/api/login', true);
+            xhr.withCredentials = true
+            xhr.onload = () => {
+                if (xhr.status === 200) {
+                    const response = JSON.parse(xhr.responseText);
+                    if (user !== response.user) {
+                        user = response.user;
+                        document.getElementById('messages').innerHTML = '';
+                        lastTimeStamp = '';
+                    }
+                    isLoggedIn = true;
+                    document.getElementById('index').style.display = isLoggedIn ? 'none' : 'block';
+                    document.getElementById('landing').style.display = isLoggedIn ? 'block' : 'none';
+
+                    if (loginProcess) {
+                        getMessages(() => {
+                            setInterval(getMessagesAfterTime, 1000);
+                        });
+                    }
+                    if (callback) callback();
+                } else if (xhr.status === 503) {
+                    showError("Server is unavailable. Please try again later.")
+                } else {
+                    isLoggedIn = false;
+                    document.getElementById('index').style.display = 'block';
+                    document.getElementById('landing').style.display = 'none';
+                }
+
+            }
+            xhr.send();
+        }
+
+        // index page javascript
+        const handleLogin = (e) => {
+            e.preventDefault()
+            const username = document.getElementById('username').value
+
+            if (!username) {
+                showError("Please enter a username")
+                return;
+            }
+
+            const xhr = new XMLHttpRequest()
+            xhr.open('POST', '/api/login', true);
+            xhr.withCredentials = true
+            xhr.setRequestHeader('Content-Type', 'application/json')
+
+            const data = JSON.stringify({username: username})
+            xhr.onload = function () {
+                if (xhr.status === 200) {
+                    isLoggedIn = true
+                    user = username
+                    checkLogin(null, true)
+                } else if (xhr.status === 409) {
+                    showError("Username already in use by another client, choose a different username")
+                } else if (xhr.status === 503) {
+                    showError("Server is unavailable. Please try again later.")
+                } else {
+                    console.error('Error logging in:', xhr.statusText);
+                }
+            }
+            xhr.send(data)
+
+        }
+
+        //landing page javascript
+        const handleSendMessages = (e) => {
+            e.preventDefault()
+            const chat = document.getElementById('chat')
+            const message = chat.value
+            const xhr = new XMLHttpRequest()
+            if (message.trim() !== '') {
+                xhr.open('POST', '/api/messages', true)
+                xhr.setRequestHeader('Content-Type', 'application/json')
+                xhr.withCredentials = true
+                const data = JSON.stringify({message: message})
+
+                xhr.onload = () => {
+                    if (xhr.status === 200) {
+
+                    } else if (xhr.status === 401) {
+                        isLoggedIn = false
+                        checkLogin()
+                    } else if (xhr.status === 503) {
+                        showError("Server is unavailable. Please try again later.")
+                    } else {
+                        console.error('Error sending message:', xhr.statusText);
+                    }
+                };
+
+                xhr.send(data)
+                chat.value = ''
+            }
+        }
+
+        const appendMessages = (messages) => {
+            const messagesContainer = document.getElementById('messages');
+
+            messages.forEach(message => {
+                const messageElement = document.createElement('div');
+                messageElement.className = message.username === user ? 'message-right' : 'message-left';
+                messageElement.innerText = `${message.username}: ${message.message}`;
+                messageElement.setAttribute('data-message-id', message.messageID);
+
+                if (message.username === user) {
+                    const deleteButton = document.createElement('button');
+                    deleteButton.innerText = 'Delete';
+                    deleteButton.onclick = () => handleDeleteMessage(message.messageID);
+                    deleteButton.style.marginLeft = '10px';
+                    messageElement.appendChild(deleteButton);
+                }
+
+                messagesContainer.appendChild(messageElement);
+                messagesContainer.scrollTop = messagesContainer.scrollHeight;
+            });
+        };
+
+        const getMessagesAfterTime = () => {
+            if (!lastTimeStamp) {
+                lastTimeStamp = 'none';
+            }
+            const xhr = new XMLHttpRequest();
+            xhr.open('GET', `/api/messages?last=${lastTimeStamp}`, true);
+            xhr.withCredentials = true
+            xhr.onload = () => {
+                if (xhr.status === 200) {
+                    try {
+                        const response_json = JSON.parse(xhr.responseText);
+                        const newMessages = JSON.parse(response_json.messages);
+
+                        const deletedMessages = (response_json.deletedMessages)
+
+                        deletedMessages.forEach(deletedID => {
+                            const messageElement = document.querySelector(`[data-message-id="${deletedID}"]`);
+                            if (messageElement) messageElement.remove();
+                        });
+
+                        appendMessages(newMessages)
+
+                        if (newMessages.length > 0) {
+                            lastTimeStamp = newMessages[newMessages.length - 1].timestamp;
+                        }
+                    } catch (error) {
+                        console.error("Failed to parse messages:", error);
+                    }
+                } else if (xhr.status === 401) {
+                    isLoggedIn = false
+                    checkLogin()
+                } else {
+                    console.error('Error fetching messages:', xhr.statusText);
+                }
+            }
+            xhr.send();
+        };
+
+
+        const getMessages = (callback) => {
+            const xhr = new XMLHttpRequest()
+            xhr.open('GET', '/api/messages', true)
+            xhr.withCredentials = true
+            xhr.onload = () => {
+                if (xhr.status === 200) {
+                    try {
+                        const response_json = JSON.parse(xhr.responseText)
+
+                        const allMessages = JSON.parse(response_json.messages);
+                        appendMessages(allMessages)
+
+                        if (allMessages.length > 0) {
+                            lastTimeStamp = allMessages[allMessages.length - 1].timestamp;
+                        }
+
+                        if (typeof callback === 'function') {
+                            callback();
+                        }
+                    } catch (error) {
+                        console.error("Failed to parse messages:", error);
+                    }
+
+                } else if (xhr.status === 503) {
+                    showError("Server is unavailable. Please try again later.")
+                } else {
+                    console.error('Error fetching messages:', xhr.statusText);
+                }
+
+            }
+            xhr.send()
+        }
+
+        const handleLogout = () => {
+            const xhr = new XMLHttpRequest()
+
+            xhr.open('DELETE', '/api/login', true);
+            xhr.withCredentials = true
+            xhr.setRequestHeader('Content-Type', 'application/json')
+
+            xhr.onload = function () {
+                if (xhr.status === 200) {
+                    isLoggedIn = false
+                    user = ''
+                    lastTimeStamp = ''
+                    document.getElementById('messages').innerHTML = ''
+                    checkLogin()
+                    alert("Logged out successfully.");
+
+                } else if (xhr.status === 503) {
+                    showError("Server is unavailable. Please try again later.")
+                } else {
+                    console.error('Error logging out:', xhr.statusText);
+                }
+            };
+            xhr.send();
+        }
+
+        const handleDeleteMessage = (messageId) => {
+            const xhr = new XMLHttpRequest();
+            xhr.open('DELETE', `/api/messages/${messageId}`, true);
+            xhr.withCredentials = true
+            xhr.onload = () => {
+                if (xhr.status === 200) {
+                    const messageElement = document.querySelector(`[data-message-id="${messageId}"]`);
+                    if (messageElement) {
+                        messageElement.remove(); // Remove the message from the DOM
+                    }
+                } else if (xhr.status === 401) {
+                    isLoggedIn = false
+                    checkLogin()
+                } else if (xhr.status === 503) {
+                    showError("Server is unavailable. Please try again later.")
+                } else {
+                    console.error('Error deleting message:', xhr.statusText);
+                }
+            };
+            xhr.send();
+        };
+
+        const showError = (message) => {
+            const error = document.getElementById('error');
+            error.innerText = message;
+            error.style.display = 'block';
+            setTimeout(() => {
+                error.style.display = 'none';
+            }, 3000);
+        };
+
+
+        document.addEventListener("DOMContentLoaded", () => {
+            checkLogin(() => {
+                if (isLoggedIn) {
+                    getMessages(() => {
+                        setInterval(getMessagesAfterTime, 1000);
+                    });
+                }
+            });
+
+            // Index page event listener
+            const loginButton = document.getElementById('login')
+            loginButton.addEventListener('click', handleLogin)
+
+            // Landing page event listener
+            const send = document.getElementById('send');
+            send.addEventListener('click', handleSendMessages);
+
+
+            const logout = document.getElementById('logout-button')
+            logout.addEventListener('click', handleLogout)
+        });
+    </script>
+</head>
+<body>
+<div id="error"></div>
+<div id="index" style="display: none;">
+    <div id="welcome">
+        <h1>Welcome to Discordn't</h1>
+        <span>Can you handle Rob's "funny" jokes? Challenge accepted! Share your favorites here!</span>
+    </div>
+
+
+    <div id="sect-1">
+        <div id="username-text">
+            USERNAME
+        </div>
+
+        <div>
+            <form id="form">
+                <label for="username">
+                    <input type="text" id="username">
+                </label>
+
+                <button id="login">
+                    Login
+                </button>
+            </form>
+        </div>
+
+    </div>
+</div>
+
+<div id="landing" style="display: none;">
+    <div id="page">
+        <div id=top>
+            <div id="messages">
+            </div>
+
+            <div id="logout">
+                <button id="logout-button">
+                    Logout
+                </button>
+            </div>
+
+        </div>
+
+
+        <div id="input-area">
+            <label for="chat">
+                <input type="text" id="chat" placeholder="Type your message here..."></input>
+            </label>
+
+            <button id="send">Send</button>
+        </div>
+
+
+    </div>
+</div>
+
+</body>
+</html>
+
+<style>
+    #error {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        font-weight: bold;
+        color: red;
+        text-align: center;
+    }
+
+    /*index page style*/
+    body {
+        background-color: #2C3E50;
+        font-size: 20px;
+        color: #ECF0F1;
+        font-family: "Calibri Light", serif;
+    }
+
+    #welcome {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        color: #BDC3C7;
+        text-align: center;
+    }
+
+
+    #sect-1 {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        gap: 8px;
+        margin: 26px auto;
+        border: 1px solid #45546A;
+        border-radius: 10px;
+        padding: 10px 15px;
+        width: 50%;
+        height: 200px;
+        background-color: #3A4D63;
+    }
+
+    #username-text {
+        font-size: 20px;
+        margin-bottom: 10px;
+        color: #ECF0F1;
+    }
+
+    #form {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        gap: 10px;
+    }
+
+    #username {
+        padding: 10px;
+        border: 1px solid #5A6B81;
+        border-radius: 5px;
+        font-size: 16px;
+        width: 100%;
+        max-width: 200px;
+        background-color: #2C3E50;
+        color: #ECF0F1;
+    }
+
+    #login {
+        padding: 10px 15px;
+        background-color: #4299E1;
+        color: #FFFFFF;
+        border: none;
+        border-radius: 5px;
+        font-size: 16px;
+        cursor: pointer;
+        transition: background-color 0.3s, transform 0.2s;
+        width: 80px;
+    }
+
+    #login:hover {
+        background-color: #3182CE;
+        transform: scale(1.05);
+    }
+
+    /*landing page style*/
+    body {
+        background-color: #2C3E50;
+        font-size: 20px;
+        color: #ECF0F1;
+        font-family: "Calibri Light", serif;
+        margin: 0;
+        padding: 20px;
+        height: 100%;
+    }
+
+    #page {
+        position: relative;
+        height: 100%;
+    }
+
+    #top {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start; /* Align items at the start */
+    }
+
+    #messages {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        width: 100%;
+        overflow-y: auto;
+        max-height: 60vh;
+        padding: 20px;
+    }
+
+    .message-left {
+        border: 1px solid #45546A;
+        background-color: #3A4D63;
+        padding: 10px;
+        border-radius: 5px;
+        transition: background-color 0.3s;
+        width: 50%;
+        box-sizing: border-box;
+    }
+
+    .message-right {
+        align-self: flex-end; /* Align message to the right */
+        border: 1px solid #4299E1;
+        background-color: #2B6CB0;
+        color: #ECF0F1;
+        padding: 10px;
+        border-radius: 5px;
+        transition: background-color 0.3s;
+        width: 50%;
+        box-sizing: border-box;
+    }
+
+
+    #input-area {
+        position: fixed;
+        bottom: 0;
+        right: 0;
+        width: 40%;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        background-color: #3A4D63;
+        padding: 10px;
+        border-radius: 5px;
+        margin: 20px;
+    }
+
+    #chat {
+        flex-grow: 1;
+        padding: 12px 16px;
+        border: 1px solid #45546A;
+        background-color: #3A4D63;
+        color: #ECF0F1;
+        font-size: 18px;
+        border-radius: 5px;
+        height: 50px;
+
+
+    }
+
+    #chat::placeholder {
+        color: #BDC3C7;
+        font-style: italic;
+    }
+
+    #send {
+        position: absolute;
+        bottom: 0;
+        right: 0;
+        background-color: #45546A;
+        color: #ECF0F1;
+        border: none;
+        padding: 8px 16px;
+        font-size: 16px;
+        border-radius: 5px;
+        cursor: pointer;
+    }
+
+    #send:hover {
+        background-color: #5C6E86;
+    }
+
+    #logout {
+        margin-bottom: 20px;
+    }
+
+    #logout-button {
+        background-color: #e74c3c;
+        color: #ECF0F1;
+        border: none;
+        padding: 10px 20px;
+        font-size: 18px;
+        border-radius: 5px;
+        cursor: pointer;
+        transition: background-color 0.3s;
+    }
+
+    #logout-button:hover {
+        background-color: #c0392b;
+    }
+</style>
