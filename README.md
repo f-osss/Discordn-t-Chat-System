@@ -95,3 +95,6 @@ Port ```8731``` for communication with terminal clients.
 Port ```8732``` for communication with the web_server.
 The web_server uses port ```8733``` to communicate with the web client (accessed via the browser).
 
+### Note: This project was developed and tested on the Aviary server at the University of Manitoba. When running locally or on another server, make sure the correct hostname and ports are used.
+
+
